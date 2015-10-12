@@ -20,7 +20,7 @@ if (!$conn->set_charset("utf8")) {
 
 if(isset($_POST['method'])){
 	if(strcmp('inicia-jogo', $_POST['method']) == 0){
-		//List($nome,$nRodadas,$j1,$j2) = explode(";",$_POST["data"]);
+		
 		$now = date("D M j G:i:s T Y");
 		$nome = md5($now);
 		$nRodadas = '10';
@@ -28,10 +28,10 @@ if(isset($_POST['method'])){
 
 		$arrayResponse = array();
 
-		$sql = "select *,
-				IF(id_jogador_2 IS NULL or id_jogador_2 = '', 'empty', id_jogador_2) as jogador_2
-				from jogo
-				limit 1;";
+		$sql = 'select * from jogo
+				where id_jogador_2 IS NULL
+				limit 1;';
+
 		$result = $conn->query($sql);
 		if ($result->num_rows > 0) {
 			$idJogoEncontrado;
@@ -48,7 +48,8 @@ if(isset($_POST['method'])){
 				array_push($arrayResponse, array('nome_jogo'=>$nome,
 												 'id_jogo'=>$idJogoEncontrado,
 											     'id_j1'=>$j1,
-											     'rodadas_restantes'=>$nRodadas));
+											     'rodadas_restantes'=>$nRodadas,
+											     'slot'=>'2'));
 				echo json_encode($arrayResponse);
 			}else{
 				array_push($arrayResponse, array('id'=>'erro-ao-entrar-no-jogo ['.$conn->error.']'));
@@ -71,25 +72,107 @@ if(isset($_POST['method'])){
 				array_push($arrayResponse, array('nome_jogo'=>$nome,
 												 'id_jogo'=>$idJogo,
 											     'id_j1'=>$j1,
-											     'rodadas_restantes'=>$nRodadas));
+											     'rodadas_restantes'=>$nRodadas,
+											     'slot'=>'1'));
 				echo json_encode($arrayResponse);
 			}else{
 				array_push($arrayResponse, array('id'=>'erro-ao-criar-jogo ['.$conn->error.']'));
 				echo json_encode($arrayResponse);
 			}
+		}		
+	}
+	else if(strcmp('verifica-rodada', $_POST['method']) == 0){
+		$arrayResponse = array();
 
+		list($idJogo,$slot) = explode(";",$_POST['data']);
+
+		$sql = "select *,rodada.id as id_rodada from rodada join jogo on (jogo.id = rodada.id_jogo)
+				where jogo.id = $idJogo and (rodada.jogada_jogador_1 is null or rodada.jogada_jogador_2 is null)";
+
+		$result = $conn->query($sql);
+
+		if ($result->num_rows > 0) {
+			$idRodada;
+			foreach($result as $model){
+				$idRodada = $model["id_rodada"];
+			}
+			$sql = null;
+			$result = null;
+			$sql = "select count(*) as nRodada from rodada join jogo on (jogo.id = rodada.id_jogo)
+					where jogo.id = $idJogo;";
+			$result = $conn->query($sql);		
+			if ($result->num_rows > 0) {
+				$nRodada;
+				foreach($result as $model){
+					$nRodada = $model["nRodada"];
+				}
+				array_push($arrayResponse, array('id_rodada'=>$idRodada,
+												 'n_rodada'=>$nRodada));
+				echo json_encode($arrayResponse);
+			}else{
+				array_push($arrayResponse, array('id'=>"erro-ao-contar-rodadas [".$conn->error."]"));
+				echo json_encode($arrayResponse);
+			}
+			
+		}else{
+			$sql = "insert into rodada values (NULL,$idJogo,NULL,NULL,0,0,NULL)";
+			if ($conn->query($sql) === TRUE) {
+				$idRodada = $conn->insert_id;
+
+				$sql = null;
+				$result = null;
+				$sql = "select count(*) as nRodada from rodada join jogo on (jogo.id = rodada.id_jogo)
+						where jogo.id = $idJogo;";
+				$result = $conn->query($sql);		
+				if ($result->num_rows > 0) {
+					$nRodada;
+					foreach($result as $model){
+						$nRodada = $model["nRodada"];
+					}
+					array_push($arrayResponse, array('id_rodada'=>$idRodada,
+													 'n_rodada'=>$nRodada));
+					echo json_encode($arrayResponse);
+				}else{
+					array_push($arrayResponse, array('id'=>"erro-ao-contar-rodadas [".$conn->error."]"));
+					echo json_encode($arrayResponse);
+				}
+
+			}else{
+				array_push($arrayResponse, array('id'=>"erro-ao-criar-rodada [".$conn->error."]"));
+				echo json_encode($arrayResponse);
+			}
 		}
+
+	}
+	else if(strcmp('jogar', $_POST['method']) == 0){
+		$arrayResponse = array();
+
+		list($jogada,$idJogo,$idRodada,$slot) = explode(";",$_POST['data']);
+
+		$sql = null;
 		
-		
-		
-		
+		if($slot=="1"){
+			$sql = "update rodada set jogada_jogador_1 = $jogada where id=$idRodada";
+		}else if ($slot=="2"){
+			$sql = "update rodada set jogada_jogador_2 = $jogada where id=$idRodada";
+		}
+
+		if ($conn->query($sql) === TRUE) {
+			array_push($arrayResponse, array('id'=>"jodada-realizada"));
+			echo json_encode($arrayResponse);
+		}else{
+			array_push($arrayResponse, array('id'=>"erro-ao-jogar [".$conn->error."]"));
+			echo json_encode($arrayResponse);
+		}
+	
 	}
 	else{
+		
 		$arrayResponse = array();
+
 		array_push($arrayResponse, array('id'=>'acao-desconhecida'));
 		echo json_encode($arrayResponse);
 	}
-
 }else{
 	/*
 	ERRO GERAL
